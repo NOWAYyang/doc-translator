@@ -274,6 +274,7 @@ async def _translate_chunk_async(
     idx: int,
     chunk: str,
     api_key: str,
+    base_url: str,
     model: str,
     source_lang: str,
     target_lang: str,
@@ -294,9 +295,7 @@ async def _translate_chunk_async(
         if cancel_event.is_set():
             return (idx, None, 0.0, 0, None)
 
-        client = AsyncOpenAI(
-            api_key=api_key, base_url="https://api.deepseek.com/v1"
-        )
+        client = AsyncOpenAI(api_key=api_key, base_url=base_url)
         prompt = _build_prompt(chunk, source_lang, target_lang)
 
         last_error: str | None = None
@@ -385,6 +384,7 @@ async def _sse_generate(params: dict):
 
         api_key = params["api_key"]
         model = params["model"]
+        base_url = params.get("base_url", "https://api.deepseek.com/v1")
         max_workers = params["max_concurrency"]
         source_lang = params["source_language"]
         target_lang = params["target_language"]
@@ -471,7 +471,7 @@ async def _sse_generate(params: dict):
             if idx in skip_set:
                 return
             result = await _translate_chunk_async(
-                idx, chunk, api_key, model,
+                idx, chunk, api_key, base_url, model,
                 source_lang, target_lang,
                 enable_search, semaphore, cancel_event,
             )
@@ -572,22 +572,52 @@ async def _sse_generate(params: dict):
 
 @app.get("/api/key")
 async def get_api_key():
-    """Return the saved (obfuscated) API key, if any."""
+    """Return the saved (obfuscated) API key and base URL, if any."""
     if _KEY_FILE.exists():
         content = _KEY_FILE.read_text("utf-8").strip()
-        key = _deobfuscate(content)
-        return {"key": key}
-    return {"key": ""}
+        try:
+            data = json.loads(content)
+            key = _deobfuscate(data.get("key", ""))
+            base_url = data.get("base_url", "https://api.deepseek.com/v1")
+            return {"key": key, "base_url": base_url}
+        except (json.JSONDecodeError, KeyError):
+            pass
+    return {"key": "", "base_url": "https://api.deepseek.com/v1"}
 
 
 @app.post("/api/key")
 async def save_api_key(request: Request):
-    """Save API key to local file with obfuscation."""
+    """Save API key and base URL to local file (key obfuscated)."""
     body = await request.json()
     key = body.get("key", "")
+    base_url = body.get("base_url", "https://api.deepseek.com/v1")
+    data = {
+        "key": _obfuscate(key) if key else "",
+        "base_url": base_url,
+    }
     if key:
-        _KEY_FILE.write_text(_obfuscate(key), encoding="utf-8")
+        _KEY_FILE.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
     return {"status": "saved"}
+
+
+# ---------------------------------------------------------------------------
+# Model list query (OpenAI-compatible /v1/models)
+# ---------------------------------------------------------------------------
+
+
+@app.get("/api/models")
+async def get_models(base_url: str = "", api_key: str = ""):
+    """Fetch available models from the provider's ``/models`` endpoint."""
+    if not base_url or not api_key:
+        return {"models": []}
+    try:
+        from openai import OpenAI as SyncOpenAI
+        client = SyncOpenAI(api_key=api_key, base_url=base_url)
+        resp = client.models.list()
+        models = sorted([m.id for m in resp])
+        return {"models": models}
+    except Exception:
+        return {"models": []}
 
 
 # ---------------------------------------------------------------------------
@@ -600,6 +630,7 @@ class TranslateRequest(BaseModel):
     model: str = "deepseek-chat"
     text: str
     max_concurrency: int = 5
+    base_url: str = "https://api.deepseek.com/v1"
 
 
 async def _stream_translate_from_deepseek(client, model: str, text: str):
@@ -622,7 +653,7 @@ async def _stream_translate_from_deepseek(client, model: str, text: str):
 async def translate(req: TranslateRequest):
     """Simple text translation (kept from v1)."""
     client = AsyncOpenAI(
-        api_key=req.api_key, base_url="https://api.deepseek.com/v1"
+        api_key=req.api_key, base_url=req.base_url
     )
     chunks: list[str] = []
     async for chunk in _stream_translate_from_deepseek(
@@ -785,6 +816,7 @@ class StreamTranslateRequest(BaseModel):
     max_concurrency: int = 5
     source_language: str = "auto"
     target_language: str = "中文"
+    base_url: str = "https://api.deepseek.com/v1"
     text: Optional[str] = None
     file_content: Optional[str] = None
     file_name: Optional[str] = None

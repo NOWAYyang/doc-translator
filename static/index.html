@@ -121,6 +121,13 @@
   }
   .btn-danger:hover { background: #b71c1c; }
   .btn-danger:disabled { opacity: .55; cursor: not-allowed; }
+  .btn-refresh {
+    background: none; border: 1px solid #ccc; border-radius: 4px;
+    cursor: pointer; font-size: 14px; padding: 0 6px; color: #888;
+    vertical-align: middle; line-height: 1.6; margin-left: 6px;
+  }
+  .btn-refresh:hover { border-color: #4a90d9; color: #4a90d9; }
+  .btn-refresh.loading { animation: spin .6s linear infinite; }
 
   .spinner {
     display: none;
@@ -310,14 +317,40 @@
       <input type="password" id="apiKey" placeholder="sk-..." autocomplete="off">
     </div>
     <div class="row">
-      <div class="form-group">
-        <label for="model">模型名称</label>
-        <input type="text" id="model" value="deepseek-chat">
+      <div class="form-group" style="position:relative">
+        <label for="model">模型名称 <button class="btn-refresh" id="refreshModelsBtn" onclick="refreshModels()" title="查询可用模型">⟳</button></label>
+        <input type="text" id="model" value="deepseek-chat" list="modelPresets" placeholder="deepseek-chat">
+        <datalist id="modelPresets">
+          <option value="deepseek-chat">
+          <option value="deepseek-reasoner">
+          <option value="qwen-max">
+          <option value="qwen-plus">
+          <option value="moonshot-v1-8k">
+          <option value="glm-4-plus">
+          <option value="glm-4-flash">
+          <option value="doubao-pro-32k">
+        </datalist>
       </div>
       <div class="form-group">
         <label for="maxConcurrency">最大并发数</label>
         <input type="number" id="maxConcurrency" value="5" min="1" max="20">
       </div>
+    </div>
+    <div class="form-group">
+      <label for="apiBaseUrl">API 地址</label>
+      <input type="url" id="apiBaseUrl" list="baseUrlPresets"
+             value="https://api.deepseek.com/v1"
+             placeholder="https://api.deepseek.com/v1">
+      <datalist id="baseUrlPresets">
+        <option value="https://api.deepseek.com/v1">DeepSeek</option>
+        <option value="https://dashscope.aliyuncs.com/compatible-mode/v1">通义千问 (Qwen)</option>
+        <option value="https://api.moonshot.cn/v1">Kimi (月之暗面)</option>
+        <option value="https://open.bigmodel.cn/api/paas/v4/">GLM (智谱)</option>
+        <option value="https://ark.cn-beijing.volces.com/api/v3">火山引擎 (Doubao)</option>
+        <option value="https://api.siliconflow.cn/v1">SiliconFlow</option>
+        <option value="https://api.minimaxi.chat/v1">MiniMax</option>
+        <option value="https://api.stepfun.com/v1">阶跃星辰 (StepFun)</option>
+      </datalist>
     </div>
     <div class="row">
       <div class="form-group">
@@ -458,6 +491,7 @@ function getSettings() {
     sourceLang:     document.getElementById("sourceLanguage").value,
     targetLang:     document.getElementById("targetLanguage").value,
     enableSearch:   document.getElementById("enableSearch").checked,
+    apiBaseUrl:     document.getElementById("apiBaseUrl").value.trim() || "https://api.deepseek.com/v1",
   };
 }
 
@@ -513,13 +547,38 @@ async function loadSavedKey() {
     if (d.key) {
       document.getElementById("apiKey").value = d.key;
     }
+    if (d.base_url) {
+      document.getElementById("apiBaseUrl").value = d.base_url;
+    }
   } catch {}
 }
 
+async function refreshModels() {
+  const baseUrl = document.getElementById("apiBaseUrl").value.trim();
+  const apiKey  = document.getElementById("apiKey").value.trim();
+  if (!baseUrl || !apiKey) { alert("请先填写 API 地址和 Key"); return; }
+
+  const btn = document.getElementById("refreshModelsBtn");
+  btn.classList.add("loading");
+  try {
+    const r = await fetch(`/api/models?base_url=${encodeURIComponent(baseUrl)}&api_key=${encodeURIComponent(apiKey)}`);
+    const d = await r.json();
+    const datalist = document.getElementById("modelPresets");
+    datalist.innerHTML = d.models.map(m => `<option value="${m}">`).join("");
+    const input = document.getElementById("model");
+    if (d.models.length > 0 && !input.value) input.value = d.models[0];
+  } catch {}
+  btn.classList.remove("loading");
+}
+
 /* Load saved API key on page load */
-window.addEventListener("DOMContentLoaded", () => {
+window.addEventListener("DOMContentLoaded", async () => {
   checkResume();
-  loadSavedKey();
+  await loadSavedKey();
+  /* Auto-fetch model list if credentials exist */
+  const baseUrl = document.getElementById("apiBaseUrl").value.trim();
+  const apiKey  = document.getElementById("apiKey").value.trim();
+  if (baseUrl && apiKey) refreshModels();
 });
 
 async function resumeLastTask() {
@@ -574,14 +633,14 @@ async function startTranslate() {
   const stats = document.getElementById("resultStats");
   const copyBtn = document.getElementById("copyBtn");
 
-  const { apiKey, model, maxConcurrency, sourceLang, targetLang, enableSearch } = getSettings();
+  const { apiKey, model, maxConcurrency, sourceLang, targetLang, enableSearch, apiBaseUrl } = getSettings();
   if (!apiKey) { alert("请输入 DeepSeek API Key"); return; }
 
-  /* Save API key locally for next time */
+  /* Save API key and base URL locally for next time */
   fetch("/api/key", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ key: apiKey }),
+    body: JSON.stringify({ key: apiKey, base_url: apiBaseUrl }),
   }).catch(() => {});
 
   const file = getSelectedFile();
@@ -597,10 +656,10 @@ async function startTranslate() {
   showCancelBtn(false);
 
   if (file) {
-    await doFileTranslateSSE(file, { apiKey, model, maxConcurrency, sourceLang, targetLang, enableSearch },
+    await doFileTranslateSSE(file, { apiKey, model, maxConcurrency, sourceLang, targetLang, enableSearch, apiBaseUrl },
                              btn, area, stats, copyBtn);
   } else {
-    await doTextTranslate(text, { apiKey, model, maxConcurrency }, btn, area, copyBtn);
+    await doTextTranslate(text, { apiKey, model, maxConcurrency, apiBaseUrl }, btn, area, copyBtn);
   }
 }
 
@@ -616,7 +675,7 @@ async function doTextTranslate(text, opts, btn, area, copyBtn) {
     const resp = await fetch("/translate", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ api_key: opts.apiKey, model: opts.model, text, max_concurrency: opts.maxConcurrency }),
+      body: JSON.stringify({ api_key: opts.apiKey, model: opts.model, text, max_concurrency: opts.maxConcurrency, base_url: opts.apiBaseUrl }),
     });
     if (!resp.ok) { const e = await resp.json().catch(()=>{}); throw new Error(e.detail || "HTTP " + resp.status); }
     const data = await resp.json();
@@ -651,6 +710,7 @@ async function doFileTranslateSSE(file, opts, btn, area, stats, copyBtn) {
         api_key: opts.apiKey, model: opts.model, max_concurrency: opts.maxConcurrency,
         source_language: opts.sourceLang, target_language: opts.targetLang,
         enable_search: opts.enableSearch,
+        base_url: opts.apiBaseUrl,
         file_content: base64Content, file_name: file.name,
       }),
     });
