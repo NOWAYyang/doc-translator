@@ -1,0 +1,14 @@
+# 保存的 API Key（混淆后存储，切勿提交）
+.translator_key
+
+# 翻译进度缓存
+progress/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+.claude

@@ -1,0 +1,811 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>翻译工具</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    background: #f5f5f5;
+    color: #333;
+    display: flex;
+    justify-content: center;
+    min-height: 100vh;
+    padding: 40px 20px;
+  }
+  .container { width: 100%; max-width: 720px; }
+  h1 { font-size: 24px; font-weight: 600; margin-bottom: 24px; color: #1a1a1a; }
+
+  .card {
+    background: #fff;
+    border-radius: 12px;
+    padding: 24px;
+    margin-bottom: 16px;
+    box-shadow: 0 1px 3px rgba(0,0,0,.08);
+  }
+  .card-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: #666;
+    margin-bottom: 16px;
+    text-transform: uppercase;
+    letter-spacing: .5px;
+  }
+  .form-group { margin-bottom: 16px; }
+  .form-group:last-child { margin-bottom: 0; }
+  label {
+    display: block;
+    font-size: 13px;
+    font-weight: 500;
+    color: #444;
+    margin-bottom: 4px;
+  }
+  input, textarea, select {
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid #d9d9d9;
+    border-radius: 8px;
+    font-size: 14px;
+    transition: border-color .2s;
+    outline: none;
+    background: #fff;
+  }
+  input:focus, textarea:focus, select:focus {
+    border-color: #4a90d9;
+    box-shadow: 0 0 0 3px rgba(74,144,217,.12);
+  }
+  textarea {
+    resize: vertical;
+    min-height: 120px;
+    font-family: inherit;
+    line-height: 1.6;
+  }
+  select { cursor: pointer; }
+  .row { display: flex; gap: 12px; }
+  .row .form-group { flex: 1; }
+
+  /* ---- Checkbox ---- */
+  .checkbox-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 0;
+    cursor: pointer;
+    font-size: 13px;
+    color: #444;
+    user-select: none;
+  }
+  .checkbox-group input[type="checkbox"] {
+    width: auto;
+    cursor: pointer;
+    accent-color: #4a90d9;
+  }
+
+  /* ---- Buttons ---- */
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 12px 24px;
+    background: #4a90d9;
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background .2s, opacity .2s;
+  }
+  .btn:hover { background: #357abd; }
+  .btn:disabled { opacity: .55; cursor: not-allowed; }
+  .btn-full { width: 100%; }
+
+  .btn-secondary {
+    background: #fff;
+    color: #4a90d9;
+    border: 1px solid #4a90d9;
+    width: auto;
+    padding: 8px 18px;
+    font-size: 13px;
+  }
+  .btn-secondary:hover { background: #eef4fb; }
+
+  .btn-danger {
+    background: #d93025;
+    width: auto;
+    padding: 8px 18px;
+    font-size: 13px;
+  }
+  .btn-danger:hover { background: #b71c1c; }
+  .btn-danger:disabled { opacity: .55; cursor: not-allowed; }
+
+  .spinner {
+    display: none;
+    width: 18px;
+    height: 18px;
+    border: 2px solid rgba(255,255,255,.3);
+    border-top-color: #fff;
+    border-radius: 50%;
+    animation: spin .6s linear infinite;
+  }
+  .btn.loading .spinner { display: inline-block; }
+  .btn.loading .btn-text { display: none; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .btn-row {
+    display: flex;
+    gap: 8px;
+    margin-top: 12px;
+  }
+
+  /* ---- File upload zone ---- */
+  .upload-zone {
+    border: 2px dashed #ccc;
+    border-radius: 10px;
+    padding: 32px 20px;
+    text-align: center;
+    cursor: pointer;
+    transition: border-color .2s, background .2s;
+    color: #888;
+  }
+  .upload-zone:hover { border-color: #4a90d9; background: #fafcff; }
+  .upload-zone.dragover { border-color: #4a90d9; background: #eef4fb; }
+  .upload-zone.has-file { border-color: #34a853; background: #f0faf4; }
+  .upload-zone .icon { font-size: 32px; margin-bottom: 8px; }
+  .upload-zone .hint { font-size: 13px; }
+  .upload-zone .filename {
+    font-size: 14px;
+    font-weight: 600;
+    color: #34a853;
+    margin-bottom: 4px;
+  }
+
+  /* ---- Progress ---- */
+  #progress-card { display: none; }
+  .progress-bar {
+    width: 100%;
+    height: 8px;
+    background: #e0e0e0;
+    border-radius: 4px;
+    overflow: hidden;
+    margin-bottom: 12px;
+  }
+  .progress-fill {
+    height: 100%;
+    background: #4a90d9;
+    border-radius: 4px;
+    transition: width .3s ease;
+    width: 0%;
+  }
+  .status-text { font-size: 14px; color: #555; }
+  .status-detail { font-size: 13px; color: #888; margin-top: 4px; }
+
+  /* ---- Cancel button row ---- */
+  .progress-actions {
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+    margin-top: 8px;
+  }
+
+  /* ---- Log area ---- */
+  .log-area {
+    margin-top: 12px;
+    border-top: 1px solid #eee;
+    padding-top: 10px;
+  }
+  .log-title {
+    font-size: 11px;
+    font-weight: 600;
+    color: #aaa;
+    margin-bottom: 6px;
+    text-transform: uppercase;
+    letter-spacing: .8px;
+  }
+  .log-content {
+    max-height: 140px;
+    overflow-y: auto;
+    font-size: 12px;
+    font-family: "SF Mono", Menlo, "Cascadia Code", monospace;
+    color: #666;
+    line-height: 1.7;
+    background: #fafafa;
+    border-radius: 6px;
+    padding: 8px 10px;
+  }
+  .log-entry { padding: 0; }
+  .log-info  { color: #4a90d9; }
+  .log-warn  { color: #e67e22; }
+  .log-error { color: #d93025; }
+
+  /* ---- Resume banner ---- */
+  #resume-banner {
+    display: none;
+    background: #fff8e1;
+    border: 1px solid #ffe082;
+    border-radius: 10px;
+    padding: 16px 20px;
+    margin-bottom: 16px;
+    font-size: 14px;
+    gap: 12px;
+    align-items: center;
+  }
+  #resume-banner .resume-text { flex: 1; color: #795548; }
+  #resume-banner .btn-secondary {
+    border-color: #ffb300;
+    color: #e65100;
+  }
+  #resume-banner .btn-secondary:hover { background: #fff3e0; }
+  #resume-banner .btn-secondary.dismiss {
+    border-color: #ccc;
+    color: #888;
+    background: transparent;
+  }
+
+  /* ---- Result ---- */
+  #result-area {
+    min-height: 120px;
+    max-height: 500px;
+    overflow-y: auto;
+    white-space: pre-wrap;
+    word-break: break-word;
+    line-height: 1.7;
+    font-size: 14px;
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+    padding: 12px;
+    margin-bottom: 12px;
+  }
+  #result-area.placeholder { color: #999; }
+  .result-footer {
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    gap: 12px;
+    font-size: 13px;
+    color: #888;
+    flex-wrap: wrap;
+  }
+  .result-footer .stats { flex: 1; }
+  .export-btns { display: flex; gap: 8px; }
+
+  .error-block {
+    color: #d93025;
+    background: #fce8e6;
+    border-radius: 8px;
+    padding: 12px 16px;
+    font-size: 14px;
+  }
+
+  .divider {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin: 18px 0;
+    color: #bbb;
+    font-size: 12px;
+  }
+  .divider::before, .divider::after { content: ""; flex: 1; border-top: 1px solid #eee; }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>翻译工具</h1>
+
+  <!-- ============ Resume banner ============ -->
+  <div id="resume-banner">
+    <div class="resume-text" id="resumeText"></div>
+    <button class="btn-secondary" onclick="resumeLastTask()">恢复翻译</button>
+    <button class="btn-secondary dismiss" onclick="dismissResume()">忽略</button>
+  </div>
+
+  <!-- ============ Settings ============ -->
+  <div class="card">
+    <div class="card-title">设置</div>
+    <div class="form-group">
+      <label for="apiKey">DeepSeek API Key</label>
+      <input type="password" id="apiKey" placeholder="sk-..." autocomplete="off">
+    </div>
+    <div class="row">
+      <div class="form-group">
+        <label for="model">模型名称</label>
+        <input type="text" id="model" value="deepseek-chat">
+      </div>
+      <div class="form-group">
+        <label for="maxConcurrency">最大并发数</label>
+        <input type="number" id="maxConcurrency" value="5" min="1" max="20">
+      </div>
+    </div>
+    <div class="row">
+      <div class="form-group">
+        <label for="sourceLanguage">源语言</label>
+        <select id="sourceLanguage">
+          <option value="auto">自动检测</option>
+          <option value="英语">英语</option>
+          <option value="中文">中文</option>
+          <option value="日语">日语</option>
+          <option value="法语">法语</option>
+          <option value="德语">德语</option>
+          <option value="西班牙语">西班牙语</option>
+          <option value="俄语">俄语</option>
+          <option value="韩语">韩语</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label for="targetLanguage">目标语言</label>
+        <select id="targetLanguage">
+          <option value="中文">中文</option>
+          <option value="英语">英语</option>
+          <option value="日语">日语</option>
+          <option value="法语">法语</option>
+          <option value="德语">德语</option>
+          <option value="西班牙语">西班牙语</option>
+          <option value="俄语">俄语</option>
+          <option value="韩语">韩语</option>
+        </select>
+      </div>
+    </div>
+    <div class="checkbox-group">
+      <input type="checkbox" id="enableSearch">
+      <span>启用联网搜索（DeepSeek 联网搜索）</span>
+    </div>
+  </div>
+
+  <!-- ============ Input ============ -->
+  <div class="card">
+    <div class="card-title">输入</div>
+    <div class="form-group">
+      <label for="sourceText">直接输入文本</label>
+      <textarea id="sourceText" placeholder="在此粘贴要翻译的文本…"></textarea>
+    </div>
+    <div class="divider">或者上传文件</div>
+    <div class="form-group">
+      <div class="upload-zone" id="uploadZone">
+        <div class="icon">&#128196;</div>
+        <div class="hint">点击选择或拖拽文件到此处</div>
+        <div style="font-size:11px;color:#aaa;margin-top:4px;">支持 .txt .pdf .epub .docx</div>
+      </div>
+      <input type="file" id="fileInput" accept=".txt,.pdf,.epub,.docx" style="display:none">
+    </div>
+    <button class="btn btn-full" id="translateBtn" onclick="startTranslate()">
+      <span class="spinner"></span>
+      <span class="btn-text">开始翻译</span>
+    </button>
+  </div>
+
+  <!-- ============ Progress ============ -->
+  <div class="card" id="progress-card">
+    <div class="card-title">翻译进度</div>
+    <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
+    <div class="status-text" id="statusText">准备中…</div>
+    <div class="status-detail" id="statusDetail"></div>
+    <div class="progress-actions">
+      <button class="btn btn-danger" id="cancelBtn" onclick="cancelTranslation()" style="display:none">终止翻译</button>
+    </div>
+    <div class="log-area">
+      <div class="log-title">运行日志</div>
+      <div class="log-content" id="logContent"></div>
+    </div>
+  </div>
+
+  <!-- ============ Result ============ -->
+  <div class="card">
+    <div class="card-title">翻译结果</div>
+    <div id="result-area" class="placeholder">等待翻译…</div>
+    <div class="result-footer">
+      <div class="stats" id="resultStats"></div>
+      <div class="export-btns" id="exportBtns" style="display:none">
+        <button class="btn-secondary" onclick="exportResult('txt')">导出 TXT</button>
+        <button class="btn-secondary" onclick="exportResult('docx')">导出 Word</button>
+        <button class="btn-secondary" onclick="exportResult('pdf')">导出 PDF</button>
+      </div>
+      <button class="btn-secondary" id="copyBtn" onclick="copyResult()" style="display:none">复制译文</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ==================================================================
+   File upload
+   ================================================================== */
+const uploadZone = document.getElementById("uploadZone");
+const fileInput = document.getElementById("fileInput");
+let _draggedFile = null;
+
+uploadZone.addEventListener("click", () => fileInput.click());
+uploadZone.addEventListener("dragover", (e) => { e.preventDefault(); uploadZone.classList.add("dragover"); });
+uploadZone.addEventListener("dragleave", () => { uploadZone.classList.remove("dragover"); });
+uploadZone.addEventListener("drop", (e) => {
+  e.preventDefault();
+  uploadZone.classList.remove("dragover");
+  if (e.dataTransfer.files.length) {
+    _draggedFile = e.dataTransfer.files[0];
+    showFileInfo(_draggedFile.name, _draggedFile.size);
+  }
+});
+fileInput.addEventListener("change", () => {
+  if (fileInput.files.length) { _draggedFile = null; showFileInfo(fileInput.files[0].name, fileInput.files[0].size); }
+});
+
+function showFileInfo(name, size) {
+  uploadZone.classList.add("has-file");
+  uploadZone.innerHTML = `<div class="icon">&#128196;</div><div class="filename">${name}</div><div class="hint">(${(size/1024).toFixed(1)} KB) 点击更换文件</div>`;
+}
+function getSelectedFile() { return _draggedFile || fileInput.files[0]; }
+
+function fileToBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => { const r = reader.result; resolve(r.indexOf(",") !== -1 ? r.slice(r.indexOf(",")+1) : r); };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+/* ==================================================================
+   Translation state
+   ================================================================== */
+let currentTaskId = null;
+
+function getSettings() {
+  return {
+    apiKey:         document.getElementById("apiKey").value.trim(),
+    model:          document.getElementById("model").value.trim() || "deepseek-chat",
+    maxConcurrency: parseInt(document.getElementById("maxConcurrency").value, 10) || 5,
+    sourceLang:     document.getElementById("sourceLanguage").value,
+    targetLang:     document.getElementById("targetLanguage").value,
+    enableSearch:   document.getElementById("enableSearch").checked,
+  };
+}
+
+function showProgress(visible) {
+  document.getElementById("progress-card").style.display = visible ? "block" : "none";
+}
+
+function setProgress(pct, text, detail) {
+  document.getElementById("progressFill").style.width = Math.min(pct, 100) + "%";
+  if (text)   document.getElementById("statusText").textContent = text;
+  if (detail) document.getElementById("statusDetail").textContent = detail;
+}
+
+function addLog(msg, level) {
+  const el = document.getElementById("logContent");
+  const d = document.createElement("div");
+  d.className = "log-entry log-" + (level || "info");
+  d.textContent = msg;
+  el.appendChild(d);
+  el.scrollTop = el.scrollHeight;
+}
+
+function clearLog() {
+  document.getElementById("logContent").innerHTML = "";
+}
+
+function showCancelBtn(show) {
+  document.getElementById("cancelBtn").style.display = show ? "inline-flex" : "none";
+}
+
+/* ==================================================================
+   Resume on page load
+   ================================================================== */
+
+async function checkResume() {
+  const lastId = localStorage.getItem("lastTaskId");
+  if (!lastId) return;
+  try {
+    const r = await fetch("/check_progress/" + lastId);
+    const d = await r.json();
+    if (d.found) {
+      document.getElementById("resumeText").textContent =
+        `发现上次未完成的翻译 (${d.completed}/${d.total_chunks} 块)，是否继续？`;
+      document.getElementById("resume-banner").style.display = "flex";
+    }
+  } catch {}
+}
+
+async function loadSavedKey() {
+  try {
+    const r = await fetch("/api/key");
+    const d = await r.json();
+    if (d.key) {
+      document.getElementById("apiKey").value = d.key;
+    }
+  } catch {}
+}
+
+/* Load saved API key on page load */
+window.addEventListener("DOMContentLoaded", () => {
+  checkResume();
+  loadSavedKey();
+});
+
+async function resumeLastTask() {
+  const lastId = localStorage.getItem("lastTaskId");
+  if (!lastId) return;
+  const apiKey = document.getElementById("apiKey").value.trim();
+  if (!apiKey) { alert("请先输入 API Key"); return; }
+
+  document.getElementById("resume-banner").style.display = "none";
+  const btn = document.getElementById("translateBtn");
+  const area = document.getElementById("result-area");
+  const stats = document.getElementById("resultStats");
+  const copyBtn = document.getElementById("copyBtn");
+
+  copyBtn.style.display = "none";
+  document.getElementById("exportBtns").style.display = "none";
+  stats.textContent = "";
+  area.className = ""; area.textContent = "";
+  clearLog();
+  showProgress(true);
+  setProgress(0, "正在恢复上次翻译…", "");
+  btn.disabled = true; btn.classList.add("loading");
+
+  try {
+    const resp = await fetch("/resume_translate/" + lastId, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ api_key: apiKey }),
+    });
+    if (!resp.ok) { const e = await resp.json().catch(()=>{}); throw new Error(e.error || "HTTP " + resp.status); }
+    if (!resp.body) { throw new Error("浏览器不支持流式读取"); }
+    await readSSEStream(resp, btn, area, stats, copyBtn);
+  } catch (err) {
+    showProgress(false);
+    area.className = "error-block";
+    area.textContent = "恢复失败：" + err.message;
+  }
+  btn.disabled = false; btn.classList.remove("loading");
+}
+
+function dismissResume() {
+  document.getElementById("resume-banner").style.display = "none";
+  localStorage.removeItem("lastTaskId");
+}
+
+/* ==================================================================
+   Start translation (text or file)
+   ================================================================== */
+async function startTranslate() {
+  const btn   = document.getElementById("translateBtn");
+  const area  = document.getElementById("result-area");
+  const stats = document.getElementById("resultStats");
+  const copyBtn = document.getElementById("copyBtn");
+
+  const { apiKey, model, maxConcurrency, sourceLang, targetLang, enableSearch } = getSettings();
+  if (!apiKey) { alert("请输入 DeepSeek API Key"); return; }
+
+  /* Save API key locally for next time */
+  fetch("/api/key", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ key: apiKey }),
+  }).catch(() => {});
+
+  const file = getSelectedFile();
+  const text = document.getElementById("sourceText").value.trim();
+  if (!file && !text) { alert("请输入文本或选择文件"); return; }
+
+  copyBtn.style.display = "none";
+  document.getElementById("exportBtns").style.display = "none";
+  stats.textContent = "";
+  area.className = ""; area.textContent = "";
+  clearLog();
+  currentTaskId = null;
+  showCancelBtn(false);
+
+  if (file) {
+    await doFileTranslateSSE(file, { apiKey, model, maxConcurrency, sourceLang, targetLang, enableSearch },
+                             btn, area, stats, copyBtn);
+  } else {
+    await doTextTranslate(text, { apiKey, model, maxConcurrency }, btn, area, copyBtn);
+  }
+}
+
+/* ------------------------------------------------------------------
+   Text mode — simple POST /translate
+   ------------------------------------------------------------------ */
+async function doTextTranslate(text, opts, btn, area, copyBtn) {
+  btn.disabled = true; btn.classList.add("loading");
+  showProgress(false);
+  area.className = ""; area.textContent = "翻译中…";
+
+  try {
+    const resp = await fetch("/translate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ api_key: opts.apiKey, model: opts.model, text, max_concurrency: opts.maxConcurrency }),
+    });
+    if (!resp.ok) { const e = await resp.json().catch(()=>{}); throw new Error(e.detail || "HTTP " + resp.status); }
+    const data = await resp.json();
+    area.className = ""; area.textContent = data.result || "(无结果)";
+    copyBtn.style.display = "inline-flex";
+    document.getElementById("exportBtns").style.display = "inline-flex";
+  } catch (err) {
+    area.className = "error-block"; area.textContent = "翻译失败：" + err.message;
+  } finally {
+    btn.disabled = false; btn.classList.remove("loading");
+  }
+}
+
+/* ------------------------------------------------------------------
+   File mode — SSE via /stream_translate
+   ------------------------------------------------------------------ */
+async function doFileTranslateSSE(file, opts, btn, area, stats, copyBtn) {
+  btn.disabled = true; btn.classList.add("loading");
+  showProgress(true);
+  setProgress(0, "正在读取文件…", "");
+
+  let base64Content;
+  try { base64Content = await fileToBase64(file); }
+  catch (err) { showProgress(false); area.className = "error-block"; area.textContent = "文件读取失败：" + err.message; btn.disabled=false; btn.classList.remove("loading"); return; }
+
+  let response;
+  try {
+    response = await fetch("/stream_translate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        api_key: opts.apiKey, model: opts.model, max_concurrency: opts.maxConcurrency,
+        source_language: opts.sourceLang, target_language: opts.targetLang,
+        enable_search: opts.enableSearch,
+        file_content: base64Content, file_name: file.name,
+      }),
+    });
+    if (!response.ok) { const e = await response.json().catch(()=>{}); throw new Error(e.error || "HTTP " + response.status); }
+  } catch (err) { showProgress(false); area.className="error-block"; area.textContent="请求失败："+err.message; btn.disabled=false; btn.classList.remove("loading"); return; }
+
+  if (!response.body) { showProgress(false); area.className="error-block"; area.textContent="浏览器不支持流式读取"; btn.disabled=false; btn.classList.remove("loading"); return; }
+
+  await readSSEStream(response, btn, area, stats, copyBtn);
+}
+
+/* ------------------------------------------------------------------
+   Generic SSE stream reader
+   ------------------------------------------------------------------ */
+async function readSSEStream(response, btn, area, stats, copyBtn) {
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  const translatedMap = {};
+  let totalChunks = 0;
+  let streamDone = false;
+  const startTime = Date.now();
+
+  function rebuildDisplay() {
+    if (totalChunks === 0) return "";
+    let result = "";
+    for (let i = 0; i < totalChunks; i++) {
+      const entry = translatedMap[i];
+      if (entry !== undefined && entry.text) {
+        result += (result === "" ? "" : (entry.newParagraph ? "\n\n" : "\n")) + entry.text;
+      }
+    }
+    return result;
+  }
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) { streamDone = true; break; }
+
+    buffer += decoder.decode(value, { stream: true });
+    const parts = buffer.split("\n\n");
+    buffer = parts.pop() || "";
+
+    for (const part of parts) {
+      if (!part.trim()) continue;
+      const lines = part.split("\n");
+      let eventType = "message", dataStr = "";
+      for (const line of lines) {
+        if (line.startsWith("event: ")) eventType = line.slice(7).trim();
+        else if (line.startsWith("data: ")) dataStr += line.slice(6);
+      }
+      if (!dataStr) continue;
+      let data;
+      try { data = JSON.parse(dataStr); } catch { continue; }
+
+      if (eventType === "task_id") {
+        currentTaskId = data.task_id;
+        localStorage.setItem("lastTaskId", data.task_id);
+        showCancelBtn(true);
+      }
+      else if (eventType === "status") {
+        setProgress(5, data.message, "");
+      }
+      else if (eventType === "log") {
+        addLog(data.message, data.level || "info");
+      }
+      else if (eventType === "progress") {
+        totalChunks = data.total;
+        translatedMap[data.chunk_id] = {
+          text: data.translated_text || "",
+          newParagraph: data.new_paragraph || false,
+        };
+        const doneCount = Object.keys(translatedMap).length;
+        const pct = Math.round(doneCount / totalChunks * 100);
+        const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+        setProgress(pct, `正在翻译第 ${doneCount}/${totalChunks} 块…`, `已用 ${elapsed}s`);
+        area.textContent = rebuildDisplay();
+        area.className = "";
+      }
+      else if (eventType === "complete") {
+        showCancelBtn(false);
+        setProgress(100, "翻译完成！",
+          `共 ${data.total_chunks} 块，成功 ${data.success_count} 块` +
+          (data.error_count > 0 ? `，失败 ${data.error_count} 块` : "") +
+          `，成功率 ${data.success_rate}%，总耗时 ${data.total_time}s`);
+        stats.textContent = `${data.total_chunks} 块 · 成功率 ${data.success_rate}% · 耗时 ${data.total_time}s`;
+        copyBtn.style.display = "inline-flex";
+        document.getElementById("exportBtns").style.display = "inline-flex";
+        btn.disabled = false; btn.classList.remove("loading");
+      }
+      else if (eventType === "cancelled") {
+        showCancelBtn(false);
+        setProgress(0, data.message, `已翻译 ${data.completed}/${data.total} 块，进度已保存`);
+        addLog("翻译已终止", "warn");
+        btn.disabled = false; btn.classList.remove("loading");
+      }
+      else if (eventType === "error") {
+        showCancelBtn(false);
+        showProgress(false);
+        area.className = "error-block";
+        area.textContent = "翻译失败：" + (data.error || "未知错误");
+        btn.disabled = false; btn.classList.remove("loading");
+      }
+    }
+  }
+
+  if (btn.disabled) { btn.disabled = false; btn.classList.remove("loading"); }
+}
+
+/* ==================================================================
+   Cancel translation
+   ================================================================== */
+async function cancelTranslation() {
+  if (!currentTaskId) return;
+  showCancelBtn(false);
+  addLog("正在发送终止信号…", "warn");
+  try {
+    await fetch("/cancel/" + currentTaskId, { method: "POST" });
+  } catch {}
+}
+
+/* ==================================================================
+   Copy & Export
+   ================================================================== */
+async function copyResult() {
+  const text = document.getElementById("result-area").textContent;
+  try {
+    await navigator.clipboard.writeText(text);
+    const btn = document.getElementById("copyBtn");
+    const orig = btn.textContent;
+    btn.textContent = "已复制!";
+    setTimeout(() => { btn.textContent = orig; }, 1500);
+  } catch { alert("复制失败，请手动选取文本复制"); }
+}
+
+async function exportResult(format) {
+  const text = document.getElementById("result-area").textContent;
+  if (!text || text === "等待翻译…") return;
+  try {
+    const resp = await fetch("/export/" + format, {
+      method: "POST",
+      headers: { "Content-Type": "text/plain" },
+      body: text,
+    });
+    if (!resp.ok) throw new Error("HTTP " + resp.status);
+    const blob = await resp.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "translated_book_" + Date.now() + "." + format;
+    document.body.appendChild(a); a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  } catch (err) { alert("导出失败：" + err.message); }
+}
+</script>
+</body>
+</html>
