@@ -342,9 +342,10 @@ def _save_progress(
         "task_id": task_id,
         "total_chunks": total,
         "translated": {str(k): v for k, v in translated.items()},
-        # Store params *except* API key
+        # Store params *except* API key and resume_data (runtime-only fields)
         "params": {
-            k: v for k, v in params.items() if k != "api_key"
+            k: v for k, v in params.items()
+            if k not in ("api_key", "resume_data")
         },
     }
     path = PROGRESS_DIR / f"{task_id}.json"
@@ -434,10 +435,10 @@ async def _sse_generate(params: dict):
                 translated[idx] = v
                 skip_set.add(idx)
             source_lang = resume_data.get("params", {}).get(
-                "source_lang", source_lang
+                "source_language", source_lang
             )
             target_lang = resume_data.get("params", {}).get(
-                "target_lang", target_lang
+                "target_language", target_lang
             )
             enable_search = resume_data.get("params", {}).get(
                 "enable_search", enable_search
@@ -468,8 +469,6 @@ async def _sse_generate(params: dict):
         start_time = time.time()
 
         async def worker(idx: int, chunk: str):
-            if idx in skip_set:
-                return
             result = await _translate_chunk_async(
                 idx, chunk, api_key, base_url, model,
                 source_lang, target_lang,
@@ -480,6 +479,7 @@ async def _sse_generate(params: dict):
         work_tasks = {
             asyncio.create_task(worker(i, c)): i
             for i, c in enumerate(chunks)
+            if i not in skip_set
         }
         pending = set(work_tasks.keys())
 
@@ -865,7 +865,7 @@ async def resume_translate(task_id: str, request: Request):
             content={"error": "进度文件不存在"},
         )
 
-    params = progress.get("params", {})
+    params = dict(progress.get("params", {}))  # shallow copy to avoid circular ref
     params["api_key"] = api_key
     params["resume_data"] = progress
 
@@ -909,15 +909,26 @@ async def cancel_translation(task_id: str):
 # ---------------------------------------------------------------------------
 
 _CHINESE_FONT_CANDIDATES: list[tuple[str, bool]] = [
+    # macOS
     ("/System/Library/Fonts/PingFang.ttc", True),
     ("/System/Library/Fonts/STSong.ttf", False),
+    ("/System/Library/Fonts/STHeiti Medium.ttc", True),
+    ("/System/Library/Fonts/Hiragino Sans GB.ttc", True),
+    ("/System/Library/Fonts/Supplemental/Songti.ttc", True),
     ("/Library/Fonts/Arial Unicode.ttf", False),
+    # Windows
     ("C:\\Windows\\Fonts\\simsun.ttc", True),
     ("C:\\Windows\\Fonts\\msyh.ttc", True),
+    ("C:\\Windows\\Fonts\\msyhbd.ttc", True),
+    ("C:\\Windows\\Fonts\\simfang.ttf", False),
+    # Linux (WQY / Noto)
     ("/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc", True),
     ("/usr/share/fonts/truetype/wqy/wqy-microhei.ttc", True),
     ("/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc", True),
     ("/usr/share/fonts/noto-cjk/NotoSansCJK-Regular.ttc", True),
+    ("/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc", True),
+    ("/usr/share/fonts/opentype/noto/NotoSansSC-Regular.otf", False),
+    ("/usr/share/fonts/truetype/droid/DroidSansFallbackFull.ttf", False),
 ]
 
 
@@ -930,95 +941,111 @@ def _find_chinese_font() -> tuple[str, bool] | None:
 
 @app.post("/export/txt")
 async def export_txt(request: Request):
-    text = (await request.body()).decode("utf-8")
-    ts = int(time.time())
-    filename = f"translated_book_{ts}.txt"
-    return Response(
-        content=text,
-        media_type="text/plain; charset=utf-8",
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
-    )
+    try:
+        text = (await request.body()).decode("utf-8")
+        ts = int(time.time())
+        filename = f"translated_book_{ts}.txt"
+        return Response(
+            content=text,
+            media_type="text/plain; charset=utf-8",
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        )
+    except Exception as exc:
+        return JSONResponse(
+            status_code=500,
+            content={"error": f"导出 TXT 失败: {exc}"},
+        )
 
 
 @app.post("/export/docx")
 async def export_docx(request: Request):
     text = (await request.body()).decode("utf-8")
 
-    from docx import Document
-    from docx.shared import Pt
-    from docx.oxml.ns import qn
+    try:
+        from docx import Document
+        from docx.shared import Pt
+        from docx.oxml.ns import qn
 
-    doc = Document()
-    style = doc.styles["Normal"]
-    style.font.name = "宋体"
-    style.font.size = Pt(12)
-    style.paragraph_format.space_after = Pt(6)
-    style.paragraph_format.line_spacing = 1.5
-    rPr = style.element.get_or_add_rPr()
-    rFonts = rPr.makeelement(qn("w:rFonts"), {})
-    rFonts.set(qn("w:ascii"), "宋体")
-    rFonts.set(qn("w:hAnsi"), "宋体")
-    rFonts.set(qn("w:eastAsia"), "宋体")
-    rFonts.set(qn("w:cs"), "宋体")
-    rPr.insert(0, rFonts)
+        doc = Document()
+        style = doc.styles["Normal"]
+        style.font.name = "宋体"
+        style.font.size = Pt(12)
+        style.paragraph_format.space_after = Pt(6)
+        style.paragraph_format.line_spacing = 1.5
+        rPr = style.element.get_or_add_rPr()
+        rFonts = rPr.makeelement(qn("w:rFonts"), {})
+        rFonts.set(qn("w:ascii"), "宋体")
+        rFonts.set(qn("w:hAnsi"), "宋体")
+        rFonts.set(qn("w:eastAsia"), "宋体")
+        rFonts.set(qn("w:cs"), "宋体")
+        rPr.insert(0, rFonts)
 
-    for line in text.split("\n"):
-        stripped = line.strip()
-        if stripped:
-            doc.add_paragraph(stripped)
+        for line in text.split("\n"):
+            stripped = line.strip()
+            if stripped:
+                doc.add_paragraph(stripped)
 
-    buf = io.BytesIO()
-    doc.save(buf)
-    buf.seek(0)
-    ts = int(time.time())
-    filename = f"translated_book_{ts}.docx"
+        buf = io.BytesIO()
+        doc.save(buf)
+        buf.seek(0)
+        ts = int(time.time())
+        filename = f"translated_book_{ts}.docx"
 
-    return Response(
-        content=buf.read(),
-        media_type=(
-            "application/vnd.openxmlformats-"
-            "officedocument.wordprocessingml.document"
-        ),
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
-    )
+        return Response(
+            content=buf.read(),
+            media_type=(
+                "application/vnd.openxmlformats-"
+                "officedocument.wordprocessingml.document"
+            ),
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        )
+    except Exception as exc:
+        return JSONResponse(
+            status_code=500,
+            content={"error": f"导出 DOCX 失败: {exc}"},
+        )
 
 
 @app.post("/export/pdf")
 async def export_pdf(request: Request):
     text = (await request.body()).decode("utf-8")
 
-    from fpdf import FPDF
+    try:
+        from fpdf import FPDF
 
-    pdf = FPDF(orientation="P", unit="mm", format="A4")
-    pdf.add_page()
-    pdf.set_auto_page_break(auto=True, margin=20)
+        pdf = FPDF(orientation="P", unit="mm", format="A4")
+        pdf.add_page()
+        pdf.set_auto_page_break(auto=True, margin=20)
 
-    font_found = _find_chinese_font()
-    if font_found:
-        font_path, is_ttc = font_found
-        kwargs = {"fname": font_path, "uni": True}
-        if is_ttc:
-            kwargs["index"] = 0
-        pdf.add_font("CJK", "", **kwargs)
-        pdf.set_font("CJK", "", 12)
-    else:
-        pdf.set_font("Helvetica", "", 12)
-
-    for line in text.split("\n"):
-        stripped = line.strip()
-        if stripped:
-            pdf.multi_cell(0, 6, stripped)
+        font_found = _find_chinese_font()
+        if font_found:
+            font_path, _ = font_found
+            pdf.add_font("CJK", "", fname=font_path)
+            pdf.set_font("CJK", "", 12)
         else:
-            pdf.ln(3)
+            pdf.set_font("Helvetica", "", 12)
 
-    ts = int(time.time())
-    filename = f"translated_book_{ts}.pdf"
+        for line in text.split("\n"):
+            stripped = line.strip()
+            if stripped:
+                pdf.set_x(pdf.l_margin)
+                pdf.multi_cell(0, 6, stripped)
+            else:
+                pdf.ln(3)
 
-    return Response(
-        content=pdf.output(),
-        media_type="application/pdf",
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
-    )
+        ts = int(time.time())
+        filename = f"translated_book_{ts}.pdf"
+
+        return Response(
+            content=bytes(pdf.output()),
+            media_type="application/pdf",
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        )
+    except Exception as exc:
+        return JSONResponse(
+            status_code=500,
+            content={"error": f"导出 PDF 失败: {exc}"},
+        )
 
 
 # ---------------------------------------------------------------------------
