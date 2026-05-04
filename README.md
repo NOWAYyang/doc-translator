@@ -1,6 +1,6 @@
 # 翻译工具
 
-基于 FastAPI 的文档翻译工具，支持 TXT/PDF/EPUB/DOCX 格式，采用 DeepSeek API 进行并行翻译，支持联网搜索、实时 SSE 流式输出、进度保存与恢复。
+基于 FastAPI 的文档翻译工具，支持 TXT/PDF/EPUB/DOCX 格式，采用 LLM的OpenAI兼容 API 进行并行翻译，支持联网搜索、实时 SSE 流式输出、进度保存与恢复（修了bug但是不知道稳不稳定（））。
 
 ## 功能
 
@@ -16,7 +16,7 @@
 
 ## 安装依赖
 
-启动时会自动用清华镜像检测并安装缺失依赖：
+启动时会自动用清华镜像（谢谢清华大学开源镜像站！！）检测并安装缺失依赖：
 
 ```bash
 pip install fastapi uvicorn openai pypdf ebooklib python-docx beautifulsoup4 fpdf2
@@ -36,7 +36,7 @@ uvicorn main:app --reload --port 8000
 
 浏览器打开 `http://localhost:8000`。
 
-## 使用联网搜索
+## 使用联网搜索（仅限DeepSeek的API
 
 1. 在设置中勾选 **"启用联网搜索"**
 2. 后端向 DeepSeek API 发送请求时会在 body 中添加 `"enable_search": true`
@@ -80,8 +80,14 @@ translator/
 
 所有设置通过 Web 界面完成，无需环境变量：
 
-- DeepSeek API Key
-- 模型名称（默认 `deepseek-chat`）
-- 最大并发数（默认 5）
-- 源语言 / 目标语言
+- LLM API Key
+- 模型名称（默认 `deepseek-chat`）（已弃用，等待修改）
+- 最大并发数（默认 5）（可以随意改但是注意API限流与自己的CPU能力）
+- 源语言 / 目标语言（必选）
 - 联网搜索开关
+
+## 写在最后
+这是一个Vibe Coding的产物，初衷是为了让阅读外文文章时稍微快乐一点
+以后会尝试封装之，在Web端边翻译边有前端可以看
+谢谢你看到这里
+:>
